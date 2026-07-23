@@ -154,11 +154,11 @@
       <div class="section-label mt"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 3 L3 21 M8 21 L3 21 L3 16 M16 3 L21 3 L21 8"/></svg>Wing Geometry</div>
       <div class="field">
         <div class="field-top"><span class="field-label">Semi-span</span><span class="field-value" id="v-span"></span></div>
-        <input type="range" id="span" min="3" max="18" step="0.1" value="9">
+        <input type="range" id="span" min="3" max="40" step="0.1" value="9">
       </div>
       <div class="field">
         <div class="field-top"><span class="field-label">Root chord</span><span class="field-value" id="v-chord"></span></div>
-        <input type="range" id="chord" min="0.8" max="4" step="0.1" value="2.2">
+        <input type="range" id="chord" min="0.8" max="18" step="0.1" value="2.2">
       </div>
       <div class="field">
         <div class="field-top"><span class="field-label">Tip chord (% root)</span><span class="field-value" id="v-taper"></span></div>
@@ -1159,7 +1159,12 @@ let vnChart = new Chart(vnCtx, {
 /* ---------------- WING PLANFORM ---------------- */
 function renderWingPlanform(s) {
   const rootChord = s.chord, tipChord = s.chord * (s.taper/100);
-  const scale = 22; // px per meter of chord
+  // Dynamic px/meter scale: caps at 22 px/m for small chords (preserves the
+  // original look), then scales down as rootChord grows so the drawn
+  // trailing edge (centerY + rootChord*scale*0.75) stays inside the fixed
+  // 620x210 viewBox instead of overflowing past it for large commercial/
+  // cargo-aircraft chords.
+  const scale = Math.min(22, 100 / Math.max(rootChord, 0.1));
   const xRoot = 50, xTip = 590, centerY = 70;
   const leRoot = centerY - rootChord*scale*0.25, teRoot = centerY + rootChord*scale*0.75;
   const leTip  = centerY - tipChord*scale*0.25,  teTip  = centerY + tipChord*scale*0.75;
