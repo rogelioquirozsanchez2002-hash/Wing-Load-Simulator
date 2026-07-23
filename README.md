@@ -4,7 +4,13 @@
 
 An interactive aero-structural load solver for a cantilevered aircraft semi-wing. Built as an extension of academic structural design work — turns a static hand-calculation into a real-time engineering tool.
 
-![Wing Load Sim screenshot](screenshot.png)
+## Interface Gallery
+
+<p align="center">
+  <img src="screenshot/screenshot1.png" alt="Wing Load Sim — flight conditions and wing geometry controls" width="800"><br><br>
+  <img src="screenshot/screenshot2.png" alt="Wing Load Sim — spar sizing and structural results" width="800"><br><br>
+  <img src="screenshot/screenshot3.png" alt="Wing Load Sim — V-n diagram and flight envelope" width="800">
+</p>
 
 ## What it does
 
@@ -13,6 +19,7 @@ Given flight conditions, wing geometry, and a spar cross-section, the tool:
 - Computes the lift coefficient from thin-airfoil theory for a selectable NACA airfoil (0012 / 2412 / 4412) and angle of attack.
 - Distributes the resulting lift along the span (elliptical or uniform) and numerically integrates shear force and bending moment along the semi-wing.
 - Sizes a hollow-box spar (width, height, wall thickness, material) and computes root bending stress, factor of safety, tip deflection, and spar mass.
+- Builds a V-n (flight envelope) diagram with a selectable airworthiness category — Normal, Utility, Aerobatic (FAR 23 / CS 23), or Transport (FAR 25 / CS 25) — each with its own positive/negative limit load factors; switching categories live-updates the envelope curves, the stall-speed (Vs) and maneuvering-speed (Va) reference lines, and the shaded safe-flight-envelope zone.
 - Flags invalid sections and angles of attack beyond the linear range of thin-airfoil theory.
 
 All computation updates live as you move the sliders — useful for building intuition about how span, airspeed, load distribution shape, and spar sizing trade off against each other.
@@ -31,6 +38,7 @@ This is an educational / portfolio-grade model, not a certified structural analy
 - Linear-elastic beam bending (Euler-Bernoulli); constant cross-section along the span.
 - Rectangular hollow-box spar as the sole load-carrying member (no skin, ribs, or shear web contribution).
 - Elliptical or uniform spanwise load distribution as idealized cases.
+- V-n diagram limit load factors are fixed per-category constants, including a fixed n+ = 2.5 for Transport category (rather than the weight-dependent FAR 25.337 formula, n = 2.1 + 24000/(W+10000) bounded to [2.5, 3.8]) and no gust-load cases; Vd is a simplified 1.4×Va heuristic rather than a certified dive-speed determination.
 
 ## SolidWorks link
 

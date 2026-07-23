@@ -344,10 +344,24 @@ const COLORS = { cyan:'#49D9C8', blue:'#6E9BF2', green:'#57D08B', amber:'#F2A93B
 // Acrobatic figure follows the analogous -0.5*n+ convention. These are
 // textbook defaults for a portfolio-level V-n diagram, not a certified
 // determination for a specific type design.
+// FAR23/25-style category presets. Negative limit factor = negFactor * nPos,
+// per the classic FAR/CS-23 Normal & Utility rule (n- = -0.4*n+); the
+// Acrobatic figure follows the analogous -0.5*n+ convention. For Transport
+// category (FAR 25 / CS 25), the real rule is a flat n- = -1.0 (FAR 25.337(c)),
+// not a fraction of n+ -- here that's expressed as negFactor = -1.0/2.5 = -0.4
+// so it falls out of the same nNeg = negFactor*nPos formula used everywhere
+// else. Also, real FAR 25.337 n+ is n = 2.1 + 24000/(W+10000), bounded to
+// [2.5, 3.8] -- weight-dependent, not a fixed constant. We keep nPos=2.5
+// fixed here (the formula's floor value) to stay consistent with how every
+// other category in this tool is modeled (fixed per-category nPos, not a
+// function of MTOW). These remain textbook/simplified defaults for a
+// portfolio-level V-n diagram, not a certified determination for a specific
+// type design.
 const VN_CATEGORIES = {
-  normal:    { label: "Normal (FAR23)", nPos: 3.8, negFactor: -0.4 },
-  utility:   { label: "Utility (FAR23)", nPos: 4.4, negFactor: -0.4 },
-  acrobatic: { label: "Acrobatic (FAR23)", nPos: 6.0, negFactor: -0.5 },
+  normal:    { label: "Normal (FAR 23 / CS 23)", nPos: 3.8, negFactor: -0.4 },
+  utility:   { label: "Utility / Utilitario (FAR 23)", nPos: 4.4, negFactor: -0.4 },
+  acrobatic: { label: "Aerobatic / Acrobático (FAR 23)", nPos: 6.0, negFactor: -0.5 },
+  transport: { label: "Transport / Comercial (FAR 25 / CS 25)", nPos: 2.5, negFactor: -0.4 },
 };
 
 /* ---------------- STATE ---------------- */
@@ -617,10 +631,23 @@ function computeVnEnvelope(s) {
   }
   negPts.push({ x:+Vd.toFixed(2), y:nNeg }, { x:+Vd.toFixed(2), y:0 });
 
+  // Malla compartida en V para la zona de vuelo segura (posPts/negPts no
+  // comparten el mismo rango de V, así que no se pueden rellenar entre sí
+  // directamente punto a punto).
+  const GRID = 60;
+  const upperAt = (V) => V <= Va ? Math.min(nPos, (V/Vstall)**2) : nPos;
+  const lowerAt = (V) => V <= VnegStall ? Math.max(nNeg, -((V/Vstall)**2)) : nNeg;
+  const zoneUpper = [], zoneLower = [];
+  for (let i = 0; i <= GRID; i++) {
+    const V = (Vd*i)/GRID;
+    zoneUpper.push({ x:+V.toFixed(2), y:+upperAt(V).toFixed(3) });
+    zoneLower.push({ x:+V.toFixed(2), y:+lowerAt(V).toFixed(3) });
+  }
+
   const r = computeAll(s);
   const nCurrent = (r.Cl*env.q*env.Sref)/(s.mtow*PHYS.g);
 
-  return { nPos, nNeg, Va, VnegStall, Vd, posPts, negPts, nCurrent };
+  return { nPos, nNeg, Va, VnegStall, Vd, Vstall, posPts, negPts, zoneUpper, zoneLower, nCurrent };
 }
 
 /* ---------------- MASS OPTIMIZER ---------------- */
@@ -1097,17 +1124,35 @@ const vnCtx = document.getElementById('vnChartCanvas').getContext('2d');
 let vnChart = new Chart(vnCtx, {
   type: 'line',
   data: { datasets: [
-    { label:'Positive boundary', data: [], borderColor: COLORS.cyan, backgroundColor: COLORS.cyan+'00', fill:false, tension:0, pointRadius:0, borderWidth:2, parsing:false },
-    { label:'Negative boundary', data: [], borderColor: COLORS.red, backgroundColor: COLORS.red+'00', fill:false, tension:0, pointRadius:0, borderWidth:2, parsing:false },
-    { label:'Current operating point', data: [], borderColor: COLORS.amber, backgroundColor: COLORS.amber, showLine:false, pointRadius:5, pointHoverRadius:6, parsing:false },
+    { label:'Zona de vuelo seguro', data: [], borderWidth:0, pointRadius:0, fill:'+1',
+      backgroundColor: COLORS.amber+'4D', parsing:false, tension:0 },
+    { label:'Límite inferior (interno)', data: [], borderWidth:0, pointRadius:0,
+      backgroundColor:'transparent', parsing:false, tension:0, fill:false },
+    { label:'Factor de carga positivo', data: [], borderColor: COLORS.cyan, backgroundColor: COLORS.cyan+'00',
+      fill:false, tension:0, pointRadius:0, borderWidth:2, parsing:false },
+    { label:'Factor de carga negativo', data: [], borderColor: COLORS.red, backgroundColor: COLORS.red+'00',
+      fill:false, tension:0, pointRadius:0, borderWidth:2, parsing:false },
+    { label:'Nivel de vuelo (n = 1)', data: [], borderColor: '#000000', borderWidth:1.5, borderDash:[6,4],
+      pointRadius:0, fill:false, tension:0, parsing:false },
+    { label:'Velocidad de pérdida (Vs)', data: [], borderColor: COLORS.green, borderWidth:1.5, borderDash:[4,4],
+      pointRadius:0, fill:false, tension:0, parsing:false },
+    { label:'Velocidad de maniobra (Va)', data: [], borderColor: COLORS.amber, borderWidth:1.5, borderDash:[4,4],
+      pointRadius:0, fill:false, tension:0, parsing:false },
+    { label:'Punto de operación actual', data: [], borderColor: COLORS.blue, backgroundColor: COLORS.blue,
+      showLine:false, pointRadius:5, pointHoverRadius:6, parsing:false },
   ] },
   options: {
     responsive:true, maintainAspectRatio:false,
     scales: {
       x: { type:'linear', title:{display:true,text:'V (m/s)',color:COLORS.muted,font:{size:11}}, grid:{color:COLORS.hair}, ticks:{color:COLORS.muted,font:{size:10}} },
-      y: { title:{display:true,text:'load factor n',color:COLORS.muted,font:{size:11}}, grid:{color:COLORS.hair}, ticks:{color:COLORS.muted,font:{size:10}} },
+      y: { title:{display:true,text:'factor de carga n',color:COLORS.muted,font:{size:11}}, grid:{color:COLORS.hair}, ticks:{color:COLORS.muted,font:{size:10}} },
     },
-    plugins:{ legend:{display:true, labels:{color:COLORS.muted, font:{size:10}, boxWidth:16}}, tooltip:{ backgroundColor:'#132436', borderColor:COLORS.hair, borderWidth:1, titleColor:COLORS.muted, bodyColor:COLORS.cyan } },
+    plugins:{
+      legend:{ display:true, position:'bottom', labels:{ color:COLORS.muted, font:{size:10}, boxWidth:14,
+        filter: (item)=> item.text !== 'Límite inferior (interno)' } },
+      tooltip:{ backgroundColor:'#132436', borderColor:COLORS.hair, borderWidth:1, titleColor:COLORS.muted, bodyColor:COLORS.cyan,
+        filter: (item)=> item.dataset.label !== 'Límite inferior (interno)' },
+    },
   }
 });
 
@@ -1311,16 +1356,21 @@ function render() {
     (overLimit ? '<br><span class="warn">⚠ one or both deflections exceed the empirical MTOW-based ceiling.</span>' : '');
 
   // V-n diagram
-  const vn = computeVnEnvelope(state);
-  vnChart.data.datasets[0].data = vn.posPts;
-  vnChart.data.datasets[1].data = vn.negPts;
-  vnChart.data.datasets[2].data = [{ x: state.velocity, y: vn.nCurrent }];
-  vnChart.update();
-  document.getElementById('vnResult').innerHTML =
-    `n⁺ = <span class="ok">${vn.nPos.toFixed(2)}</span> at V<sub>A</sub> ${fmt(vn.Va,1)} m/s · ` +
-    `n⁻ = <span class="ok">${vn.nNeg.toFixed(2)}</span> at ${fmt(vn.VnegStall,1)} m/s · ` +
-    `V<sub>D</sub> (heuristic 1.4×V<sub>A</sub>) ${fmt(vn.Vd,1)} m/s · current n ≈ ${fmt(vn.nCurrent,2)}`;
-
+const vn = computeVnEnvelope(state);
+vnChart.data.datasets[0].data = vn.zoneUpper;                                     // Zona de vuelo seguro
+vnChart.data.datasets[1].data = vn.zoneLower;                                     // ancla inferior del relleno
+vnChart.data.datasets[2].data = vn.posPts;                                        // Factor de carga positivo
+vnChart.data.datasets[3].data = vn.negPts;                                        // Factor de carga negativo
+vnChart.data.datasets[4].data = [{ x:0, y:1 }, { x: vn.Vd, y:1 }];                // Nivel de vuelo n=1
+vnChart.data.datasets[5].data = [{ x: vn.Vstall, y: vn.nNeg }, { x: vn.Vstall, y: vn.nPos }]; // Vs
+vnChart.data.datasets[6].data = [{ x: vn.Va, y: 0 }, { x: vn.Va, y: vn.nPos }];    // Va
+vnChart.data.datasets[7].data = [{ x: state.velocity, y: vn.nCurrent }];          // punto actual
+vnChart.update();
+document.getElementById('vnResult').innerHTML =
+  `n⁺ = <span class="ok">${vn.nPos.toFixed(2)}</span> en V<sub>A</sub> ${fmt(vn.Va,1)} m/s · ` +
+  `n⁻ = <span class="ok">${vn.nNeg.toFixed(2)}</span> en ${fmt(vn.VnegStall,1)} m/s · ` +
+  `V<sub>s</sub> (pérdida) = ${fmt(vn.Vstall,1)} m/s · ` +
+  `V<sub>D</sub> (heurística 1.4×V<sub>A</sub>) ${fmt(vn.Vd,1)} m/s · n actual ≈ ${fmt(vn.nCurrent,2)}`;
   // badge
   const icon = document.getElementById('badgeIcon');
   icon.setAttribute('stroke', fsColor);
